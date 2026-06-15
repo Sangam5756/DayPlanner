@@ -1,9 +1,9 @@
 import { getToken } from "next-auth/jwt";
 import type { JWT } from "next-auth/jwt";
-import { NextRequest, NextResponse } from "next/server";
 import { refreshGoogleAccessToken } from "@/lib/auth";
 import { connectMongo } from "@/lib/mongodb";
 import { Task } from "@/models/Task";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   let token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });

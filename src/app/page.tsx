@@ -5,7 +5,6 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Category = "dsa" | "learning" | "reading" | "personal" | "office" | "habit";
 type View = "today" | "tasks" | "progress";
-type Preferences = { dayStart: string; dayEnd: string };
 type TaskInput = {
   title: string;
   category: Category;
@@ -24,15 +23,6 @@ type Task = TaskInput & {
   calendarEventId?: string;
 };
 
-const toMinutes = (value: string) => {
-  const [hours, minutes] = value.split(":").map(Number);
-  return hours * 60 + minutes;
-};
-
-const formatMinutes = (value: number) => {
-  const safe = Math.max(0, Math.round(value));
-  return `${Math.floor(safe / 60)}h ${safe % 60}m`;
-};
 
 const today = () => {
   const now = new Date();
@@ -65,10 +55,6 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiPlan, setAiPlan] = useState<TaskInput[]>([]);
-  const [preferences, setPreferences] = useState<Preferences>({
-    dayStart: "06:00",
-    dayEnd: "23:00",
-  });
   const [now, setNow] = useState(() => new Date());
 
   const loadTasks = useCallback(async () => {
@@ -84,14 +70,7 @@ export default function Home() {
     loadTasks();
   }, [loadTasks]);
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    fetch("/api/preferences")
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.dayStart && data.dayEnd) setPreferences(data);
-      });
-  }, [status]);
+
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -191,9 +170,7 @@ export default function Home() {
       body: JSON.stringify({
         prompt: aiPrompt,
         currentDate: today(),
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        dayStart: preferences.dayStart,
-        dayEnd: preferences.dayEnd,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
       }),
     });
     const data = await response.json().catch(() => null);
@@ -245,25 +222,6 @@ export default function Home() {
     if (response.ok) await loadTasks();
   }
 
-  async function saveDayHours(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/preferences", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(Object.fromEntries(form.entries())),
-    });
-    const data = await response.json();
-    if (response.ok) {
-      setPreferences(data);
-      setModal(null);
-      showNotice(`Your day is set from ${data.dayStart} to ${data.dayEnd}`);
-    } else {
-      showNotice(data.error || "Could not save day hours");
-    }
-    setSaving(false);
-  }
 
   async function skipTask(task: Task) {
     const reason = window.prompt("What got in the way? Be honest and brief.");
@@ -319,7 +277,7 @@ export default function Home() {
           onToday={() => navigate("today", today())}
           onAdd={() => setModal("task")}
           onAi={() => setModal("ai")}
-          onHours={() => setModal("hours")}
+          // onHours={() => setModal("hours")}
         />
         {view === "today" && (
           <TodayView
@@ -329,9 +287,6 @@ export default function Home() {
             minutes={minutes}
             completed={completed}
             nextTask={nextTask}
-            date={date}
-            now={now}
-            preferences={preferences}
             onAdd={() => setModal("task")}
             onUpdate={updateTask}
             onSkip={skipTask}
@@ -346,9 +301,6 @@ export default function Home() {
         )}
       </section>
 
-      {modal === "task" && (
-        <TaskModal date={date} preferences={preferences} saving={saving} onClose={() => setModal(null)} onSubmit={createTask} />
-      )}
       {modal === "ai" && (
         <AiModal
           prompt={aiPrompt}
@@ -358,14 +310,6 @@ export default function Home() {
           onGenerate={generateAiPlan}
           onAccept={acceptAiPlan}
           onClose={() => { setModal(null); setAiPlan([]); }}
-        />
-      )}
-      {modal === "hours" && (
-        <DayHoursModal
-          preferences={preferences}
-          saving={saving}
-          onClose={() => setModal(null)}
-          onSubmit={saveDayHours}
         />
       )}
     </main>
