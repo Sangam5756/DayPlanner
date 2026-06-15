@@ -312,6 +312,15 @@ export default function Home() {
           onClose={() => { setModal(null); setAiPlan([]); }}
         />
       )}
+      
+       {modal === "task" && (
+        <TaskModal
+          date={date}
+          saving={saving}
+          onClose={() => setModal(null)}
+          onSubmit={createTask}
+        />
+      )}
     </main>
   );
 }
