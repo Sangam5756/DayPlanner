@@ -3,6 +3,16 @@
 import { signIn, signOut, useSession } from "next-auth/react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+// Define default categories with labels and colors
+const DEFAULT_CATEGORIES = [
+  { id: "dsa", label: "DSA", color: "orange" },
+  { id: "learning", label: "Learning", color: "purple" },
+  { id: "reading", label: "Reading", color: "reading" },
+  { id: "personal", label: "Personal", color: "personal" },
+  { id: "office", label: "Office", color: "blue" },
+  { id: "habit", label: "Habit", color: "habit" },
+];
+
 type Category = "dsa" | "learning" | "reading" | "personal" | "office" | "habit";
 type View = "today" | "tasks" | "progress";
 type TaskInput = {
@@ -56,6 +66,35 @@ export default function Home() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiPlan, setAiPlan] = useState<TaskInput[]>([]);
   const [now, setNow] = useState(() => new Date());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  const openEditModal = (task: Task) => {
+    setEditingTask(task);
+    setModal("task");
+  };
+
+  const closeModal = () => {
+    setModal(null);
+    setEditingTask(null);
+  };
+
+  const toggleTheme = () => {
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("daymark-theme", newTheme);
+  };
+
+  // Initialize theme from localStorage on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("daymark-theme");
+    if (savedTheme) {
+      setTheme(savedTheme as "light" | "dark");
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+  }, []);
 
   const loadTasks = useCallback(async () => {
     if (status !== "authenticated") return;
@@ -130,31 +169,58 @@ export default function Home() {
     return data as Task;
   }
 
-  async function createTask(event: FormEvent<HTMLFormElement>) {
+  async function deleteTask(taskId: string) {
+    if (!window.confirm("Are you sure you want to delete this task?")) return;
+    const response = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+    if (response.ok) {
+      await loadTasks();
+      showNotice("Task deleted");
+    }
+  }
+
+  async function handleTaskSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     try {
       const form = new FormData(event.currentTarget);
-      const input = {
-        ...(Object.fromEntries(form.entries()) as unknown as TaskInput),
-        date,
-        syncToCalendar: form.has("sync"),
-      };
-      const task = await createTaskData(input);
-      setModal(null);
-      await loadTasks();
-      if (input.syncToCalendar) {
-        try {
-          await syncCalendar(task._id, false);
-          showNotice("Task added and synced to Google Calendar");
-        } catch (error) {
-          showNotice(`Task saved. ${error instanceof Error ? error.message : "Calendar sync failed."}`);
-        }
+      if (editingTask) {
+        // Update existing task
+        const updates = {
+          title: form.get("title") as string,
+          category: form.get("category") as Category,
+          priority: form.get("priority") as "low" | "medium" | "high",
+          start: form.get("start") as string,
+          end: form.get("end") as string,
+          notes: form.get("notes") as string,
+          resourceUrl: form.get("resourceUrl") as string,
+          date: editingTask.date,
+        };
+        await updateTask(editingTask._id, updates);
+        showNotice("Task updated");
       } else {
-        showNotice("Task added to your plan");
+        // Create new task
+        const input = {
+          ...(Object.fromEntries(form.entries()) as unknown as TaskInput),
+          date,
+          syncToCalendar: form.has("sync"),
+        };
+        const task = await createTaskData(input);
+        if (input.syncToCalendar) {
+          try {
+            await syncCalendar(task._id, false);
+            showNotice("Task added and synced to Google Calendar");
+          } catch (error) {
+            showNotice(`Task saved. ${error instanceof Error ? error.message : "Calendar sync failed."}`);
+          }
+        } else {
+          showNotice("Task added to your plan");
+        }
       }
+      setModal(null);
+      setEditingTask(null);
+      await loadTasks();
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : "Could not create task");
+      showNotice(error instanceof Error ? error.message : "Could not save task");
     } finally {
       setSaving(false);
     }
@@ -254,22 +320,47 @@ export default function Home() {
 
   return (
     <main className="shell">
-      <aside>
-        <div className="brand"><span className="logo mini">D</span><b>Daymark</b></div>
+      {sidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
+      <aside className={sidebarOpen ? "open" : ""}>
+        <div className="brand">
+          <span className="logo mini">D</span>
+          <b>Daymark</b>
+        </div>
         <nav>
-          <button className={view === "today" ? "selected" : ""} onClick={() => navigate("today", today())}>Today</button>
-          <button className={view === "tasks" ? "selected" : ""} onClick={() => navigate("tasks")}>All tasks</button>
-          <button className={view === "progress" ? "selected" : ""} onClick={() => navigate("progress")}>Progress</button>
+          <button className={view === "today" ? "selected" : ""} onClick={() => { navigate("today", today()); setSidebarOpen(false); }}>Today</button>
+          <button className={view === "tasks" ? "selected" : ""} onClick={() => { navigate("tasks"); setSidebarOpen(false); }}>All tasks</button>
+          <button className={view === "progress" ? "selected" : ""} onClick={() => { navigate("progress"); setSidebarOpen(false); }}>Progress</button>
         </nav>
         <div className="account">
           {session.user?.image && <img src={session.user.image} alt="" />}
           <div><b>{session.user?.name}</b><small>{session.user?.email}</small></div>
-          <button onClick={() => signOut()}>Sign out</button>
+          <div className="account-buttons">
+            <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+              {theme === "light" ? "☾" : "☀"}
+            </button>
+            <button onClick={() => signOut()}>Sign out</button>
+          </div>
         </div>
       </aside>
 
       <section className="workspace">
         {notice && <div className="notice">{notice}</div>}
+        <div className="mobile-bar">
+          <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle menu">
+            <span />
+            <span />
+            <span />
+          </button>
+          <div className="brand mini-brand">
+            <span className="logo mini">D</span>
+            <b>Daymark</b>
+          </div>
+          <button className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === "light" ? "☾" : "☀"}
+          </button>
+        </div>
         <PageHeader
           view={view}
           date={date}
@@ -291,10 +382,12 @@ export default function Home() {
             onUpdate={updateTask}
             onSkip={skipTask}
             onSync={syncCalendar}
+            onEdit={openEditModal}
+            onDelete={deleteTask}
           />
         )}
         {view === "tasks" && (
-          <AllTasks tasks={tasks} loading={loading} onUpdate={updateTask} onSkip={skipTask} onSync={syncCalendar} />
+          <AllTasks tasks={tasks} loading={loading} onUpdate={updateTask} onSkip={skipTask} onSync={syncCalendar} onEdit={openEditModal} onDelete={deleteTask} />
         )}
         {view === "progress" && (
           <Progress tasks={tasks} completed={completed} skipped={skipped} planned={planned} score={score} minutes={minutes} />
@@ -315,10 +408,11 @@ export default function Home() {
       
        {modal === "task" && (
         <TaskModal
-          date={date}
+          task={editingTask}
+          date={editingTask?.date || date}
           saving={saving}
-          onClose={() => setModal(null)}
-          onSubmit={createTask}
+          onClose={closeModal}
+          onSubmit={handleTaskSubmit}
         />
       )}
     </main>
@@ -335,17 +429,20 @@ function PageHeader({ view, date, onMoveDate, onToday, onAdd, onAi }: {
     <header className="topbar">
       <div><p className="kicker">{view === "progress" ? "YOUR CONSISTENCY" : "DAILY COMMAND CENTER"}</p><h1>{title}</h1><small>{view === "today" ? dateLabel : view === "tasks" ? "Every promise in one place" : "An honest view of your follow-through"}</small></div>
       <div className="date-nav">
-        {view === "today" && <><button onClick={() => onMoveDate(-1)} aria-label="Previous day">&lt;</button><button onClick={onToday}>Today</button><button onClick={() => onMoveDate(1)} aria-label="Next day">&gt;</button></>}
-        <button className="ai-button" onClick={onAi}>AI plan</button>
-        <button className="primary" onClick={onAdd}>+ Plan a block</button>
+        {view === "today" && <div className="day-pager"><button onClick={() => onMoveDate(-1)} aria-label="Previous day">&lt;</button><button onClick={onToday}>Today</button><button onClick={() => onMoveDate(1)} aria-label="Next day">&gt;</button></div>}
+        <div className="action-buttons">
+          <button className="ai-button" onClick={onAi} title="Plan with AI">AI plan</button>
+          <button className="primary" onClick={onAdd}>+ <span>Plan a block</span></button>
+        </div>
       </div>
     </header>
   );
 }
 
-function TodayView({ tasks, loading, score, minutes, completed, nextTask, onAdd, onUpdate, onSkip, onSync }: {
+function TodayView({ tasks, loading, score, minutes, completed, nextTask, onAdd, onUpdate, onSkip, onSync, onEdit, onDelete }: {
   tasks: Task[]; loading: boolean; score: number; minutes: number; completed: number; nextTask?: Task; onAdd: () => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>; onSkip: (task: Task) => Promise<void>; onSync: (id: string) => Promise<void>;
+  onEdit: (task: Task) => void; onDelete: (id: string) => Promise<void>;
 }) {
   return <>
     <section className="cards">
@@ -353,30 +450,36 @@ function TodayView({ tasks, loading, score, minutes, completed, nextTask, onAdd,
       <article className="score"><ScoreRing score={score} /><div><p className="label">DISCIPLINE SCORE</p><h3>{score >= 80 ? "Strong day" : score >= 50 ? "Keep going" : "Start small"}</h3><small>{completed} of {tasks.length} promises kept</small></div></article>
       <article className="focus"><p className="label">PLANNED FOCUS</p><strong>{Math.floor(minutes / 60)}h {minutes % 60}m</strong><small>across {tasks.length} blocks</small></article>
     </section>
-    <TaskPanel title="Plan, then follow through." tasks={tasks} loading={loading} emptyAction={onAdd} onUpdate={onUpdate} onSkip={onSkip} onSync={onSync} />
+    <TaskPanel title="Plan, then follow through." tasks={tasks} loading={loading} emptyAction={onAdd} onUpdate={onUpdate} onSkip={onSkip} onSync={onSync} onEdit={onEdit} onDelete={onDelete} />
   </>;
 }
 
-function AllTasks(props: { tasks: Task[]; loading: boolean; onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>; onSkip: (task: Task) => Promise<void>; onSync: (id: string) => Promise<void> }) {
+function AllTasks(props: { tasks: Task[]; loading: boolean; onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>; onSkip: (task: Task) => Promise<void>; onSync: (id: string) => Promise<void>; onEdit: (task: Task) => void; onDelete: (id: string) => Promise<void> }) {
   return <TaskPanel title="Everything you have planned." groupByDate {...props} />;
 }
 
-function TaskPanel({ title, tasks, loading, groupByDate, emptyAction, onUpdate, onSkip, onSync }: {
+function TaskPanel({ title, tasks, loading, groupByDate, emptyAction, onUpdate, onSkip, onSync, onEdit, onDelete }: {
   title: string; tasks: Task[]; loading: boolean; groupByDate?: boolean; emptyAction?: () => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>; onSkip: (task: Task) => Promise<void>; onSync: (id: string) => Promise<void>;
+  onEdit: (task: Task) => void; onDelete: (id: string) => Promise<void>;
 }) {
   return <section className="timeline">
     <header><div><p className="label">{groupByDate ? "TASK LIBRARY" : "YOUR TIMELINE"}</p><h2>{title}</h2></div></header>
     {loading ? <div className="empty">Loading your plan...</div> : tasks.length === 0 ? <div className="empty"><b>No time blocks yet.</b><span>Give your day a shape before it fills itself.</span>{emptyAction && <button onClick={emptyAction}>Plan the first block</button>}</div> :
-      <div>{tasks.map((task, index) => <div key={task._id}>{groupByDate && (index === 0 || tasks[index - 1].date !== task.date) && <h3 className="date-divider">{new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${task.date}T12:00:00`))}</h3>}<TaskRow task={task} onUpdate={onUpdate} onSkip={onSkip} onSync={onSync} /></div>)}</div>}
+      <div>{tasks.map((task, index) => <div key={task._id}>{groupByDate && (index === 0 || tasks[index - 1].date !== task.date) && <h3 className="date-divider">{new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${task.date}T12:00:00`))}</h3>}<TaskRow task={task} onUpdate={onUpdate} onSkip={onSkip} onSync={onSync} onEdit={onEdit} onDelete={onDelete} /></div>)}</div>}
   </section>;
 }
 
-function TaskRow({ task, onUpdate, onSkip, onSync }: { task: Task; onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>; onSkip: (task: Task) => Promise<void>; onSync: (id: string) => Promise<void> }) {
+function TaskRow({ task, onUpdate, onSkip, onSync, onEdit, onDelete }: { task: Task; onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>; onSkip: (task: Task) => Promise<void>; onSync: (id: string) => Promise<void>; onEdit: (task: Task) => void; onDelete: (id: string) => Promise<void> }) {
   return <article className={`task ${task.status}`}>
     <time>{task.start}<small>{task.end}</small></time><i className={task.category} />
     <div className="task-info"><span className={`pill ${task.category}`}>{task.category}</span>{task.priority === "high" && <span className="pill priority">high</span>}<h3>{task.title}</h3>{task.resourceUrl && <a href={task.resourceUrl} target="_blank" rel="noreferrer">Open resource</a>}{task.skipReason && <p>Skipped: {task.skipReason}</p>}</div>
-    <div className="task-buttons">{task.status === "planned" ? <><button onClick={() => onUpdate(task._id, { status: "completed" })} title="Complete">OK</button><button onClick={() => onSkip(task)} title="Skip">X</button></> : <small>{task.status}</small>}<button onClick={() => onSync(task._id)} title="Sync Google Calendar">G</button></div>
+    <div className="task-buttons">
+      <button className="edit-btn" onClick={() => onEdit(task)} title="Edit">✏️</button>
+      <button className="delete-btn" onClick={() => onDelete(task._id)} title="Delete">🗑️</button>
+      {task.status === "planned" ? <><button onClick={() => onUpdate(task._id, { status: "completed" })} title="Complete">OK</button><button onClick={() => onSkip(task)} title="Skip">X</button></> : <small>{task.status}</small>}
+      <button onClick={() => onSync(task._id)} title="Sync Google Calendar">G</button>
+    </div>
   </article>;
 }
 
@@ -392,8 +495,8 @@ function ScoreRing({ score }: { score: number }) {
   return <div className="ring" style={{ "--score": `${score * 3.6}deg` } as React.CSSProperties}><span>{score}<small>%</small></span></div>;
 }
 
-function TaskModal({ date, saving, onClose, onSubmit }: { date: string; saving: boolean; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void> }) {
-  return <div className="backdrop" onMouseDown={onClose}><form className="task-form" onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()}><header><div><p className="label">NEW TIME BLOCK - {date}</p><h2>Make a clear promise.</h2></div><button type="button" onClick={onClose}>X</button></header><label>Task name<input name="title" placeholder="Read React rendering article" required autoFocus /></label><div className="form-grid"><label>Category<select name="category" defaultValue="dsa"><option value="dsa">DSA</option><option value="learning">Learning</option><option value="reading">Reading</option><option value="personal">Personal</option><option value="office">Office task name</option><option value="habit">Habit</option></select></label><label>Priority<select name="priority" defaultValue="medium"><option>low</option><option>medium</option><option>high</option></select></label><label>Start<input type="time" name="start" defaultValue="07:00" required /></label><label>End<input type="time" name="end" defaultValue="08:00" required /></label></div><label>Resource or blog link<input type="url" name="resourceUrl" placeholder="https://example.com/article" /></label><label>Notes<textarea name="notes" placeholder="What does done look like?" /></label><label className="check"><input type="checkbox" name="sync" /> Add to Google Calendar</label><button className="primary submit" disabled={saving}>{saving ? "Planning..." : "Add to my day"}</button></form></div>;
+function TaskModal({ task, date, saving, onClose, onSubmit }: { task?: Task | null; date: string; saving: boolean; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void> }) {
+  return <div className="backdrop" onMouseDown={onClose}><form className="task-form" onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()}><header><div><p className="label">{task ? "EDIT TIME BLOCK" : `NEW TIME BLOCK - ${date}`}</p><h2>{task ? "Update your promise." : "Make a clear promise."}</h2></div><button type="button" onClick={onClose}>X</button></header><label>Task name<input name="title" placeholder="Read React rendering article" required autoFocus defaultValue={task?.title} /></label><div className="form-grid"><label>Category<select name="category" defaultValue={task?.category || "dsa"}>{DEFAULT_CATEGORIES.map((cat) => <option key={cat.id} value={cat.id}>{cat.label}</option>)}</select></label><label>Priority<select name="priority" defaultValue={task?.priority || "medium"}><option>low</option><option>medium</option><option>high</option></select></label><label>Start<input type="time" name="start" defaultValue={task?.start || "07:00"} required /></label><label>End<input type="time" name="end" defaultValue={task?.end || "08:00"} required /></label></div><label>Resource or blog link<input type="url" name="resourceUrl" placeholder="https://example.com/article" defaultValue={task?.resourceUrl} /></label><label>Notes<textarea name="notes" placeholder="What does done look like?" defaultValue={task?.notes} /></label>{!task && <label className="check"><input type="checkbox" name="sync" /> Add to Google Calendar</label>}<button className="primary submit" disabled={saving}>{saving ? "Saving..." : task ? "Update task" : "Add to my day"}</button></form></div>;
 }
 
 function AiModal({ prompt, plan, saving, onPrompt, onGenerate, onAccept, onClose }: { prompt: string; plan: TaskInput[]; saving: boolean; onPrompt: (value: string) => void; onGenerate: (event: FormEvent) => Promise<void>; onAccept: () => Promise<void>; onClose: () => void }) {
@@ -401,7 +504,47 @@ function AiModal({ prompt, plan, saving, onPrompt, onGenerate, onAccept, onClose
 }
 
 function Login() {
-  return <main className="login"><section className="login-copy"><div className="logo">D</div><p className="kicker">YOUR PERSONAL OPERATING SYSTEM</p><h1>Turn intention into a day you can finish.</h1><p className="intro">Plan focused work, DSA practice, learning, and life in one honest timeline.</p><button className="google" onClick={() => signIn("google")}><span>G</span> Continue with Google</button><small>Your plans stay private to your Google account.</small></section><section className="login-art"><div className="preview"><header><b>Today</b><strong>82% discipline</strong></header><Preview time="07:00" title="Two pointer practice" meta="DSA - 60 min" kind="dsa" /><Preview time="10:00" title="Project focus block" meta="Office - 90 min" kind="office" /><Preview time="19:30" title="Read system design notes" meta="Reading - 45 min" kind="reading" /></div></section></main>;
+  // Use same theme logic
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const toggleTheme = () => {
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("daymark-theme", newTheme);
+  };
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("daymark-theme");
+    if (savedTheme) {
+      setTheme(savedTheme as "light" | "dark");
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+  }, []);
+  
+  return (
+    <main className="login">
+      <section className="login-copy">
+        <div className="login-header">
+          <div className="logo">D</div>
+          <button className="theme-toggle login-theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === "light" ? "☾" : "☀"}
+          </button>
+        </div>
+        <p className="kicker">YOUR PERSONAL OPERATING SYSTEM</p>
+        <h1>Turn intention into a day you can finish.</h1>
+        <p className="intro">Plan focused work, DSA practice, learning, and life in one honest timeline.</p>
+        <button className="google" onClick={() => signIn("google")}><span>G</span> Continue with Google</button>
+        <small>Your plans stay private to your Google account.</small>
+      </section>
+      <section className="login-art">
+        <div className="preview">
+          <header><b>Today</b><strong>82% discipline</strong></header>
+          <Preview time="07:00" title="Two pointer practice" meta="DSA - 60 min" kind="dsa" />
+          <Preview time="10:00" title="Project focus block" meta="Office - 90 min" kind="office" />
+          <Preview time="19:30" title="Read system design notes" meta="Reading - 45 min" kind="reading" />
+        </div>
+      </section>
+    </main>
+  );
 }
 
 function Preview({ time, title, meta, kind }: { time: string; title: string; meta: string; kind: string }) {

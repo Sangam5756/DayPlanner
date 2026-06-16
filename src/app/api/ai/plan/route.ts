@@ -1,31 +1,42 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { GoogleGenerativeAI, SchemaType, Schema } from "@google/generative-ai";
 
-const taskSchema = {
-  type: "object",
-  additionalProperties: false,
+const taskSchema: Schema = {
+  description: "A list of structured planner time blocks",
+  type: SchemaType.OBJECT,
+  nullable: false,
   properties: {
     tasks: {
-      type: "array",
-      minItems: 1,
-      maxItems: 12,
+      type: SchemaType.ARRAY,
+      description: "Array of tasks to be added to the planner",
+      nullable: false,
       items: {
-        type: "object",
-        additionalProperties: false,
+        type: SchemaType.OBJECT,
+        nullable: false,
         properties: {
-          title: { type: "string" },
+          title: { type: SchemaType.STRING, description: "Title of the task", nullable: false },
           category: {
-            type: "string",
+            type: SchemaType.STRING,
             enum: ["dsa", "learning", "reading", "personal", "office", "habit"],
+            description: "Category of the task",
+            format: "enum",
+            nullable: false,
           },
-          date: { type: "string", description: "Date in YYYY-MM-DD format" },
-          start: { type: "string", description: "24-hour time in HH:MM format" },
-          end: { type: "string", description: "24-hour time in HH:MM format" },
-          priority: { type: "string", enum: ["low", "medium", "high"] },
-          notes: { type: "string" },
-          resourceUrl: { type: "string" },
-          syncToCalendar: { type: "boolean" },
+          date: { type: SchemaType.STRING, description: "Date in YYYY-MM-DD format", nullable: false },
+          start: { type: SchemaType.STRING, description: "24-hour time in HH:MM format", nullable: false },
+          end: { type: SchemaType.STRING, description: "24-hour time in HH:MM format", nullable: false },
+          priority: {
+            type: SchemaType.STRING,
+            enum: ["low", "medium", "high"],
+            description: "Priority level",
+            format: "enum",
+            nullable: false,
+          },
+          notes: { type: SchemaType.STRING, description: "Additional details or notes", nullable: false },
+          resourceUrl: { type: SchemaType.STRING, description: "URL for resources, or empty string", nullable: false },
+          syncToCalendar: { type: SchemaType.BOOLEAN, description: "Whether to sync to Google Calendar", nullable: false },
         },
         required: [
           "title",
@@ -49,9 +60,11 @@ export async function POST(request: Request) {
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!process.env.OPENAI_API_KEY) {
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
     return NextResponse.json(
-      { error: "Add OPENAI_API_KEY to .env to enable the AI planner." },
+      { error: "Add GEMINI_API_KEY to .env to enable the AI planner." },
       { status: 503 }
     );
   }
@@ -61,44 +74,50 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Describe what you need to plan." }, { status: 400 });
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-5.5",
-      instructions:
-        "Convert the user's request into realistic planner time blocks. Do not invent confidential office details. Resolve relative dates from the supplied current date. Avoid overlapping blocks. Use reading for books, blogs, articles, or documentation. Put any supplied URL in resourceUrl, otherwise use an empty string. Default syncToCalendar to true unless the user says not to sync. If no duration is given, use 45 minutes.",
-      input: `Current date: ${currentDate}\nTime zone: ${timeZone}\nUsable day: ${dayStart || "06:00"} to ${dayEnd || "23:00"}\nKeep every task inside the usable day.\nPlan request: ${prompt}`,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "daily_plan",
-          strict: true,
-          schema: taskSchema,
-        },
-      },
-    }),
-  });
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const systemInstruction = `Convert the user's request into realistic planner time blocks. 
+Do not invent confidential office details. 
+Resolve relative dates from the supplied current date: ${currentDate}. 
+Time zone: ${timeZone}.
+Usable day: ${dayStart || "06:00"} to ${dayEnd || "23:00"}.
+Keep every task inside the usable day.
+Avoid overlapping blocks. 
+Use 'reading' for books, blogs, articles, or documentation. 
+Put any supplied URL in resourceUrl, otherwise use an empty string. 
+Default syncToCalendar to true unless the user says not to sync. 
+If no duration is given, use 45 minutes.`;
 
-  const data = await response.json();
-  if (!response.ok) {
-    console.error("OpenAI planner failed", data);
+    const model = genAI.getGenerativeModel({
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash", 
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: taskSchema,
+      },
+      systemInstruction: systemInstruction,
+    });
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let outputText = response.text();
+
+    if (!outputText) {
+      return NextResponse.json({ error: "AI returned an empty plan." }, { status: 502 });
+    }
+
+    // Strip markdown if present
+    if (outputText.includes("```json")) {
+      outputText = outputText.split("```json")[1].split("```")[0].trim();
+    } else if (outputText.includes("```")) {
+      outputText = outputText.split("```")[1].split("```")[0].trim();
+    }
+
+    return NextResponse.json(JSON.parse(outputText));
+  } catch (error: any) {
+    console.error("Gemini planner failed", error);
     return NextResponse.json(
-      { error: data?.error?.message || "AI could not create the plan." },
-      { status: response.status }
+      { error: error?.message || "AI could not create the plan." },
+      { status: 500 }
     );
   }
-
-  const outputText = data.output
-    ?.flatMap((item: { content?: Array<{ type: string; text?: string }> }) => item.content ?? [])
-    .find((item: { type: string }) => item.type === "output_text")?.text;
-
-  if (!outputText) {
-    return NextResponse.json({ error: "AI returned an empty plan." }, { status: 502 });
-  }
-
-  return NextResponse.json(JSON.parse(outputText));
 }

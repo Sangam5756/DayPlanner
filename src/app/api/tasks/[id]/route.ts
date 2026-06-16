@@ -22,6 +22,11 @@ export async function PATCH(
     "start",
     "end",
     "calendarEventId",
+    "title",
+    "category",
+    "priority",
+    "notes",
+    "resourceUrl",
   ];
   const updates = Object.fromEntries(
     Object.entries(body).filter(([key]) => allowed.includes(key))
