@@ -2,6 +2,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, SchemaType, Schema } from "@google/generative-ai";
+import { connectMongo } from "@/lib/mongodb";
+import { UserPreference } from "@/models/UserPreference";
 
 const taskSchema: Schema = {
   description: "A list of structured planner time blocks",
@@ -19,9 +21,7 @@ const taskSchema: Schema = {
           title: { type: SchemaType.STRING, description: "Title of the task", nullable: false },
           category: {
             type: SchemaType.STRING,
-            enum: ["dsa", "learning", "reading", "personal", "office", "habit"],
-            description: "Category of the task",
-            format: "enum",
+            description: "Category of the task (must use one of the provided category IDs)",
             nullable: false,
           },
           date: { type: SchemaType.STRING, description: "Date in YYYY-MM-DD format", nullable: false },
@@ -74,6 +74,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Describe what you need to plan." }, { status: 400 });
   }
 
+  // Load user's custom categories
+  await connectMongo();
+  let userPrefs = await UserPreference.findOne({ userEmail: session.user.email });
+  const categories = userPrefs?.categories || [
+    { id: "dsa", label: "DSA", color: "orange" },
+    { id: "learning", label: "Learning", color: "purple" },
+    { id: "reading", label: "Reading", color: "teal" },
+    { id: "personal", label: "Personal", color: "indigo" },
+    { id: "office", label: "Office", color: "blue" },
+    { id: "habit", label: "Habit", color: "green" },
+  ];
+
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const systemInstruction = `Convert the user's request into realistic planner time blocks. 
@@ -86,10 +98,13 @@ Avoid overlapping blocks.
 Use 'reading' for books, blogs, articles, or documentation. 
 Put any supplied URL in resourceUrl, otherwise use an empty string. 
 Default syncToCalendar to true unless the user says not to sync. 
-If no duration is given, use 45 minutes.`;
+If no duration is given, use 45 minutes.
+
+IMPORTANT: Only use these category IDs (do not create new categories):
+${categories.map((cat: any) => `- ${cat.id} (${cat.label})`).join("\n")}`;
 
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash", 
+      model: process.env.GEMINI_MODEL || "gemini-1.5-flash-latest", 
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: taskSchema,

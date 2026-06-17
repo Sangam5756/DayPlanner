@@ -10,11 +10,12 @@ A modern, multi-user daily discipline planner designed to help you turn intentio
 - **Google Sign-In**: Secure, one-click authentication using your Google account
 - **User-Isolated Data**: Private MongoDB collections for each user's tasks and preferences
 - **Daily Time-Block Timeline**: Visual, structured view of your day
-- **Task Categories**: Predefined categories: DSA, Learning, Reading, Personal, Office, and Habit
+- **Task Categories**: Fully configurable categories with custom colors
 - **Priority Levels**: Low, Medium, High priority flags for each task
 - **Completion Tracking**: Mark tasks as complete, or skip them with a required justification
 - **AI-Powered Planning**: Natural language planning with Google Gemini, with review before task creation
 - **"Do This Next" Guidance**: Smart suggestion of your next prioritized task
+- **Weekly Blueprint**: Define your recurring weekly routine once and generate tasks from it
 
 ### Productivity & Analytics
 - **Daily Discipline Score**: A weighted score combining completed and planned tasks
@@ -22,6 +23,7 @@ A modern, multi-user daily discipline planner designed to help you turn intentio
 - **Google Calendar Sync**: One-way task sync to your personal Google Calendar
 - **Resource Attachments**: Add article, blog, or documentation links directly to your reading tasks
 - **Progress View**: Detailed breakdown of your consistency over time
+- **Category Breakdown**: See how your time is distributed across categories
 
 ### Interface
 - **Three Views**: Today (daily plan), All Tasks (task library), and Progress (analytics)
@@ -30,6 +32,7 @@ A modern, multi-user daily discipline planner designed to help you turn intentio
 - **Light & Dark Theme**: Eye-friendly color schemes with persistent theme preference
 - **Hamburger Menu**: Clean sidebar toggle for optimal mobile experience
 - **Task Management**: Full edit and delete functionality for all tasks
+- **Settings Panel**: Configure your preferences, categories, and weekly blueprint in one place
 
 ---
 
@@ -62,7 +65,7 @@ A modern, multi-user daily discipline planner designed to help you turn intentio
    ```
 
 4. **Configure Google Cloud Project**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Go to `https://console.cloud.google.com/`
    - Create a new project
    - Enable the **Google Calendar API** and **Google Identity Services API**
    - Create an **OAuth 2.0 Web Application** client:
@@ -72,12 +75,12 @@ A modern, multi-user daily discipline planner designed to help you turn intentio
    - Copy your `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to your `.env.local` file
 
 5. **Set up MongoDB**
-   - Create a free tier cluster on [MongoDB Atlas](https://www.mongodb.com/atlas/database)
+   - Create a free tier cluster on `https://www.mongodb.com/atlas/database`
    - Get your connection string and update `MONGODB_URI` in `.env.local`
    - Create a database named `daymark` (or your preferred name)
 
 6. **Get your Google Gemini API Key**
-   - Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
+   - Go to `https://aistudio.google.com/app/apikey`
    - Create an API key and add it as `GEMINI_API_KEY` in your `.env.local` file
    - (Optional) Set `GEMINI_MODEL` (default: `gemini-1.5-flash-latest`)
 
@@ -123,16 +126,16 @@ GEMINI_MODEL=gemini-1.5-flash-latest
 
 ## 📦 Tech Stack
 
-| Technology       | Version | Purpose                          |
-|-------------------|---------|----------------------------------|
-| Next.js           | 15.3.3  | Full-stack framework             |
-| React             | 19.1.0  | UI library                       |
-| TypeScript        | 5.8.3   | Type-safe development            |
-| MongoDB           | 8.15.1  | NoSQL database                   |
-| Mongoose          | 8.15.1  | ODM for MongoDB                  |
-| NextAuth.js       | 4.24.11 | Authentication                   |
-| Google Generative AI | 0.24.1 | AI planning using Gemini      |
-| Tailwind CSS      | Built-in (via globals.css) | Responsive styling |
+| Technology               | Version | Purpose                          |
+|--------------------------|---------|----------------------------------|
+| Next.js                  | 15.3.3  | Full-stack framework             |
+| React                    | 19.1.0  | UI library                       |
+| TypeScript               | 5.8.3   | Type-safe development            |
+| MongoDB                  | 8.15.1  | NoSQL database                   |
+| Mongoose                 | 8.15.1  | ODM for MongoDB                  |
+| NextAuth.js              | 4.24.11 | Authentication                   |
+| Google Generative AI     | 0.24.1  | AI planning using Gemini         |
+| Tailwind CSS             | Built-in (via globals.css) | Responsive styling |
 
 ---
 
