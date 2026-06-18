@@ -67,6 +67,45 @@ type Task = TaskInput & {
   calendarEventId?: string;
 };
 
+// Helper functions for time calculations
+function parseTimeToMinutes(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function formatMinutesToTime(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+}
+
+function formatRemainingTime(nowMinutes: number, dayStartMinutes: number, dayEndMinutes: number) {
+  if (nowMinutes < dayStartMinutes) {
+    return { remaining: dayEndMinutes - dayStartMinutes, started: false, remainingStr: "" };
+  }
+  if (nowMinutes > dayEndMinutes) {
+    return { remaining: 0, started: true, remainingStr: "" };
+  }
+  const remainingMinutes = dayEndMinutes - nowMinutes;
+  const hoursRemaining = Math.floor(remainingMinutes / 60);
+  const minsRemaining = remainingMinutes % 60;
+  return {
+    remaining: remainingMinutes,
+    started: true,
+    remainingStr: `${hoursRemaining}h ${minsRemaining}m`
+  };
+}
+
+function calculateTotalScheduledMinutes(tasks: Task[]): number {
+  return tasks.reduce((total, task) => {
+    const start = parseTimeToMinutes(task.start);
+    const end = parseTimeToMinutes(task.end);
+    return total + (end - start);
+  }, 0);
+}
+
 
 const today = () => {
   const now = new Date();
@@ -176,10 +215,17 @@ export default function Home() {
   }, [status]);
 
   const loadBlueprint = useCallback(async () => {
+    console.log("loadBlueprint - starting, status:", status);
     if (status !== "authenticated") return;
     setBlueprintLoading(true);
+    console.log("loadBlueprint - fetching /api/blueprint");
     const response = await fetch("/api/blueprint");
-    if (response.ok) setBlueprint(await response.json());
+    console.log("loadBlueprint - response ok:", response.ok, "status:", response.status);
+    if (response.ok) {
+      const blueprintData = await response.json();
+      console.log("loadBlueprint - got blueprint data:", blueprintData);
+      setBlueprint(blueprintData);
+    }
     setBlueprintLoading(false);
   }, [status]);
 
@@ -266,6 +312,33 @@ export default function Home() {
       }, 0),
     [tasks]
   );
+
+  // Calculate remaining time for today's tasks
+  const nowMinutes = useMemo(() => {
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    return hours * 60 + mins;
+  }, [now]);
+
+  const remainingTimeInfo = useMemo(() => {
+    if (!userPrefs) return { remaining: 0, started: false, remainingStr: "" };
+    return formatRemainingTime(
+      nowMinutes,
+      parseTimeToMinutes(userPrefs.dayStart),
+      parseTimeToMinutes(userPrefs.dayEnd)
+    );
+  }, [nowMinutes, userPrefs]);
+
+  const scheduledMinutes = useMemo(() => {
+    return calculateTotalScheduledMinutes(tasks);
+  }, [tasks]);
+
+  const dayTotalMinutes = useMemo(() => {
+    if (!userPrefs) return 0;
+    const start = parseTimeToMinutes(userPrefs.dayStart);
+    const end = parseTimeToMinutes(userPrefs.dayEnd);
+    return end - start;
+  }, [userPrefs]);
 
   function navigate(nextView: View, nextDate = date) {
     const params = new URLSearchParams();
@@ -493,7 +566,7 @@ export default function Home() {
           onToday={() => navigate("today", today())}
           onAdd={() => setModal("task")}
           onAi={() => setModal("ai")}
-          // onHours={() => setModal("hours")}
+          onGenerateFromBlueprint={view === "today" ? generateTasksFromBlueprint : undefined}
         />
         {view === "today" && (
           <TodayView
@@ -510,6 +583,10 @@ export default function Home() {
             onSync={syncCalendar}
             onEdit={openEditModal}
             onDelete={deleteTask}
+            remainingTimeInfo={remainingTimeInfo}
+            scheduledMinutes={scheduledMinutes}
+            dayTotalMinutes={dayTotalMinutes}
+            userPrefs={userPrefs}
           />
         )}
         {view === "tasks" && (
@@ -518,16 +595,20 @@ export default function Home() {
         {view === "progress" && (
         <Progress tasks={tasks} completed={completed} skipped={skipped} planned={planned} score={score} minutes={minutes} categories={userPrefs?.categories || []} />
       )}
-      {view === "settings" && userPrefs && blueprint && (
-        <Settings
-          userPrefs={userPrefs}
-          onSave={saveUserPreferences}
-          blueprint={blueprint}
-          onSaveBlueprint={saveBlueprint}
-          onGenerateTasks={generateTasksFromBlueprint}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-        />
+      {view === "settings" && (
+        prefsLoading || blueprintLoading ? (
+          <div className="empty">Loading settings and blueprint...</div>
+        ) : userPrefs && blueprint ? (
+          <Settings
+            userPrefs={userPrefs}
+            onSave={saveUserPreferences}
+            blueprint={blueprint}
+            onSaveBlueprint={saveBlueprint}
+            onGenerateTasks={generateTasksFromBlueprint}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        ) : null
       )}
     </section>
 
@@ -558,8 +639,9 @@ export default function Home() {
   );
 }
 
-function PageHeader({ view, date, onMoveDate, onToday, onAdd, onAi }: {
+function PageHeader({ view, date, onMoveDate, onToday, onAdd, onAi, onGenerateFromBlueprint }: {
   view: View; date: string; onMoveDate: (days: number) => void; onToday: () => void; onAdd: () => void; onAi: () => void;
+  onGenerateFromBlueprint?: () => Promise<void>;
 }) {
   const dateLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" })
     .format(new Date(`${date}T12:00:00`));
@@ -593,6 +675,11 @@ function PageHeader({ view, date, onMoveDate, onToday, onAdd, onAi }: {
           {view === "today" && <div className="day-pager"><button onClick={() => onMoveDate(-1)} aria-label="Previous day">&lt;</button><button onClick={onToday}>Today</button><button onClick={() => onMoveDate(1)} aria-label="Next day">&gt;</button></div>}
           <div className="action-buttons">
             <button className="ai-button" onClick={onAi} title="Plan with AI">AI plan</button>
+            {view === "today" && onGenerateFromBlueprint && (
+              <button className="primary" onClick={onGenerateFromBlueprint} title="Generate from Blueprint">
+                📅+
+              </button>
+            )}
             <button className="primary" onClick={onAdd}>+ <span>Plan a block</span></button>
           </div>
         </div>
@@ -601,26 +688,62 @@ function PageHeader({ view, date, onMoveDate, onToday, onAdd, onAi }: {
   );
 }
 
-function TodayView({ tasks, loading, score, minutes, completed, nextTask, onAdd, onGenerateFromBlueprint, onUpdate, onSkip, onSync, onEdit, onDelete }: {
+function TodayView({ tasks, loading, score, minutes, completed, nextTask, onAdd, onGenerateFromBlueprint, onUpdate, onSkip, onSync, onEdit, onDelete, remainingTimeInfo, scheduledMinutes, dayTotalMinutes, userPrefs }: {
   tasks: Task[]; loading: boolean; score: number; minutes: number; completed: number; nextTask?: Task; onAdd: () => void;
   onGenerateFromBlueprint: () => Promise<void>;
   onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>; onSkip: (task: Task) => Promise<void>; onSync: (id: string) => Promise<void>;
   onEdit: (task: Task) => void; onDelete: (id: string) => Promise<void>;
+  remainingTimeInfo: { remaining: number; started: boolean; remainingStr: string };
+  scheduledMinutes: number;
+  dayTotalMinutes: number;
+  userPrefs: UserPreferences | null;
 }) {
+  const dayStartStr = userPrefs ? formatMinutesToTime(parseTimeToMinutes(userPrefs.dayStart)) : "05:30 AM";
+  const dayEndStr = userPrefs ? formatMinutesToTime(parseTimeToMinutes(userPrefs.dayEnd)) : "10:20 PM";
+  const scheduledHours = Math.floor(scheduledMinutes / 60);
+  const scheduledMins = scheduledMinutes % 60;
+  const dayHours = Math.floor(dayTotalMinutes / 60);
+  const dayMins = dayTotalMinutes % 60;
+  const remainingHours = Math.floor(remainingTimeInfo.remaining / 60);
+  const remainingMins = remainingTimeInfo.remaining % 60;
+  const remainingPercent = dayTotalMinutes > 0 ? Math.min(100, Math.max(0, (remainingTimeInfo.remaining / dayTotalMinutes) * 100)) : 0;
+  const scheduledPercent = dayTotalMinutes > 0 ? Math.min(100, Math.max(0, (scheduledMinutes / dayTotalMinutes) * 100)) : 0;
+  
   return <>
     <section className="cards">
+      {/* Remaining Time Card */}
+      <article style={{ padding: "20px", background: "var(--paper)", borderRadius: "12px", border: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div>
+          <p className="label">YOUR DAY</p>
+          <h3 style={{ margin: 0, fontSize: "1.5rem" }}>
+            {!remainingTimeInfo.started ? `Day starts at ${dayStartStr}` : 
+             remainingTimeInfo.remainingStr ? `${remainingHours}h ${remainingMins}m left` : 
+             "Day complete"}
+          </h3>
+          <small style={{ color: "var(--muted)" }}>
+            {dayStartStr} - {dayEndStr} ({dayHours}h {dayMins}m total)
+          </small>
+        </div>
+        
+        {/* Progress bar */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div style={{ display: "flex", gap: "8px", justifyContent: "space-between" }}>
+            <small style={{ color: "var(--muted)" }}>
+              Scheduled: {scheduledHours}h {scheduledMins}m ({Math.round(scheduledPercent)}%)
+            </small>
+            <small style={{ color: "var(--muted)" }}>
+              Remaining: {remainingHours}h {remainingMins}m ({Math.round(remainingPercent)}%)
+            </small>
+          </div>
+          <div style={{ height: "8px", background: "var(--panel)", borderRadius: "4px", overflow: "hidden", display: "flex" }}>
+            <div style={{ width: `${scheduledPercent}%`, background: "var(--primary-button-bg)", height: "100%" }}></div>
+            <div style={{ width: `${remainingPercent}%`, background: "#e2e8f0", height: "100%" }}></div>
+          </div>
+        </div>
+      </article>
+      
       <article className="next"><p className="label">DO THIS NEXT</p><h2>{nextTask?.title || (tasks.length ? "Day complete" : "Plan your first block")}</h2><p>{nextTask ? `${nextTask.start}-${nextTask.end} - ${nextTask.category}` : "Your next clear action will appear here."}</p>{nextTask && <div><button onClick={() => onUpdate(nextTask._id, { status: "completed" })}>Mark complete</button><button onClick={() => onSkip(nextTask)}>Skip</button></div>}</article>
       <article className="score"><ScoreRing score={score} /><div><p className="label">DISCIPLINE SCORE</p><h3>{score >= 80 ? "Strong day" : score >= 50 ? "Keep going" : "Start small"}</h3><small>{completed} of {tasks.length} promises kept</small></div></article>
-      <article style={{ padding: "20px", background: "var(--paper)", borderRadius: "12px", border: "1px solid var(--line)" }}>
-        <p className="label">WEEKLY BLUEPRINT</p>
-        <button
-          className="primary"
-          onClick={onGenerateFromBlueprint}
-          style={{ marginTop: "10px" }}
-        >
-          📅 Generate Today from Blueprint
-        </button>
-      </article>
     </section>
     <TaskPanel title="Plan, then follow through." tasks={tasks} loading={loading} emptyAction={onAdd} onUpdate={onUpdate} onSkip={onSkip} onSync={onSync} onEdit={onEdit} onDelete={onDelete} />
   </>;
@@ -887,39 +1010,67 @@ function AiModal({ prompt, plan, saving, onPrompt, onGenerate, onAccept, onClose
 
 function BlueprintSlotEditor({ slot, onUpdate, onDelete, categories }: { slot: BlueprintSlot; onUpdate: (updatedSlot: BlueprintSlot) => void; onDelete: () => void; categories: CategoryItem[]; }) {
   return (
-    <div style={{ display: "flex", gap: "8px", alignItems: "center", padding: "12px", background: "var(--panel)", borderRadius: "8px", border: "1px solid var(--line)" }}>
-      <input
-        type="time"
-        value={slot.start}
-        onChange={(e) => onUpdate({ ...slot, start: e.target.value })}
-        style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
-      />
-      <span style={{ color: "var(--muted)" }}>-</span>
-      <input
-        type="time"
-        value={slot.end}
-        onChange={(e) => onUpdate({ ...slot, end: e.target.value })}
-        style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
-      />
-      <input
-        type="text"
-        value={slot.title}
-        onChange={(e) => onUpdate({ ...slot, title: e.target.value })}
-        placeholder="Task Title"
-        style={{ flex: "1", padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
-      />
-      <select
-        value={slot.category}
-        onChange={(e) => onUpdate({ ...slot, category: e.target.value })}
-        style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
-      >
-        {categories.map((cat) => (
-          <option key={cat.id} value={cat.id}>{cat.label}</option>
-        ))}
-      </select>
-      <button type="button" onClick={onDelete} style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)", cursor: "pointer" }}>
-        🗑️
-      </button>
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: "12px",
+      padding: "16px",
+      background: "var(--panel)",
+      borderRadius: "10px",
+      border: "1px solid var(--line)",
+      width: "100%"
+    }}>
+      {/* Time row */}
+      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
+          <input
+            type="time"
+            value={slot.start}
+            onChange={(e) => onUpdate({ ...slot, start: e.target.value })}
+            style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+          />
+          <span style={{ color: "var(--muted)", fontWeight: 600 }}>to</span>
+        </div>
+        <input
+          type="time"
+          value={slot.end}
+          onChange={(e) => onUpdate({ ...slot, end: e.target.value })}
+          style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+        />
+      </div>
+
+      {/* Task info row */}
+      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <input
+          type="text"
+          value={slot.title}
+          onChange={(e) => onUpdate({ ...slot, title: e.target.value })}
+          placeholder="Task Title"
+          style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+        />
+        <select
+          value={slot.category}
+          onChange={(e) => onUpdate({ ...slot, category: e.target.value })}
+          style={{ minWidth: "140px", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+        >
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>{cat.label}</option>
+          ))}
+        </select>
+        <button type="button" onClick={onDelete} style={{
+          padding: "10px 14px",
+          borderRadius: "8px",
+          border: "1px solid var(--line)",
+          background: "var(--panel)",
+          color: "var(--ink)",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center"
+        }}>
+          🗑️
+        </button>
+      </div>
     </div>
   );
 }
@@ -929,14 +1080,27 @@ function BlueprintEditor({ blueprint, categories, onSave, onGenerateTasks }: { b
   const [isSaving, setIsSaving] = useState(false);
   const [activeDay, setActiveDay] = useState<DayOfWeek>("monday");
 
+  console.log("BlueprintEditor - received blueprint prop:", blueprint);
+  console.log("BlueprintEditor - localBlueprint state:", localBlueprint);
+
+  // Update local state when blueprint prop changes
+  useEffect(() => {
+    console.log("BlueprintEditor - useEffect - blueprint prop changed, updating localBlueprint");
+    setLocalBlueprint({ ...blueprint });
+  }, [blueprint]);
+
   const handleSave = async () => {
+    console.log("BlueprintEditor - handleSave, saving localBlueprint:", localBlueprint);
     setIsSaving(true);
     await onSave(localBlueprint);
     setIsSaving(false);
   };
 
   const updateDay = (dayName: DayOfWeek, updatedDay: BlueprintDay) => {
-    setLocalBlueprint({ ...localBlueprint, [dayName]: updatedDay });
+    console.log("BlueprintEditor - updateDay called with dayName:", dayName, "updatedDay:", updatedDay);
+    const newBlueprint = { ...localBlueprint, [dayName]: updatedDay };
+    console.log("BlueprintEditor - newBlueprint after update:", newBlueprint);
+    setLocalBlueprint(newBlueprint);
   };
 
   const dayNames: DayOfWeek[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
