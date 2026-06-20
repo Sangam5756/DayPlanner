@@ -1,7 +1,5 @@
 import { Schema, model, models } from "mongoose";
 
-type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
-
 interface BlueprintSlot {
   start: string; // "05:30"
   end: string; // "06:00"

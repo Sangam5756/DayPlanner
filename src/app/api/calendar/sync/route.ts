@@ -40,3 +40,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  let token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token?.email) {
+    return NextResponse.json({ error: "Please sign in again" }, { status: 401 });
+  }
+
+  const accessTokenExpired =
+    !token.accessToken ||
+    !token.accessTokenExpires ||
+    Date.now() >= token.accessTokenExpires - 60_000;
+
+  if (accessTokenExpired) {
+    token = await refreshGoogleAccessToken(token as JWT);
+  }
+
+  if (!token.accessToken || token.error) {
+    return NextResponse.json(
+      {
+        error:
+          token.error === "MissingRefreshToken"
+            ? "Calendar permission is missing. Sign out, then sign in and allow Google Calendar access."
+            : "Google authorization expired. Sign out and connect Google again.",
+        code: token.error,
+      },
+      { status: 401 }
+    );
+  }
+
+  const { taskId } = await request.json();
+  try {
+    await CalendarService.deleteFromGoogleCalendar(taskId, token.accessToken);
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

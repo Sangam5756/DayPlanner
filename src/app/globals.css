@@ -248,7 +248,8 @@ nav button.selected { color: white; background: #ffffff14; }
   .shell > aside.open { transform: translateX(0); }
 
   .shell > aside .brand { margin: 0 0 42px; }
-  .shell > aside nav, .account div, .account img { display: block; }
+  .shell > aside nav { display: grid; }
+  .shell > aside .account div, .shell > aside .account img { display: block; }
 
   .account { margin-top: auto; padding-top: 14px; border-top: 1px solid #ffffff1a; }
 
@@ -257,7 +258,7 @@ nav button.selected { color: white; background: #ffffff14; }
   .hamburger { display: flex; flex-direction: column; gap: 4px; width: 34px; height: 34px; padding: 10px; background: transparent; border: 1px solid var(--line); border-radius: 8px; }
   .hamburger span { width: 100%; height: 2px; background: var(--ink); border-radius: 1px; display: block; }
 
-  .workspace { padding: 0 18px 45px; }
+  .workspace { padding: 0 12px 45px; }
   .topbar { align-items: flex-start; flex-direction: column; }
   .date-nav { width: 100%; flex-wrap: wrap; justify-content: space-between; }
   .action-buttons { flex: 1; }

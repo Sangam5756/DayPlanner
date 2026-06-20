@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { Preview } from "./Preview";

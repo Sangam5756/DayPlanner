@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { Blueprint, CategoryItem, DayOfWeek } from "@/types";
 import { BlueprintSlotEditor } from "./BlueprintSlotEditor";
@@ -98,11 +100,11 @@ export function BlueprintEditor({ blueprint, categories, onSave, onGenerateTasks
           />
         ))}
       </div>
-      <div style={{ display: "flex", gap: "10px" }}>
-        <button type="button" onClick={onGenerateTasks} style={{ flex: 1, padding: "10px", border: "1px solid var(--line)", borderRadius: "8px", background: "var(--panel)", color: "var(--ink)", cursor: "pointer" }}>
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <button type="button" onClick={onGenerateTasks} style={{ flex: "1 1 auto", minWidth: "120px", padding: "10px", border: "1px solid var(--line)", borderRadius: "8px", background: "var(--panel)", color: "var(--ink)", cursor: "pointer" }}>
           📅 Generate Tasks from Blueprint
         </button>
-        <button type="button" onClick={handleSave} disabled={isSaving} className="primary" style={{ padding: "10px 24px" }}>
+        <button type="button" onClick={handleSave} disabled={isSaving} className="primary" style={{ flex: "0 1 auto", minWidth: "120px", padding: "10px 24px" }}>
           {isSaving ? "Saving..." : "Save Blueprint"}
         </button>
       </div>

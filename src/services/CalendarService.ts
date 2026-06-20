@@ -54,4 +54,27 @@ export class CalendarService {
     await TaskRepository.updateTask(taskId, { calendarEventId: event.id });
     return { eventId: event.id };
   }
+
+  static async deleteFromGoogleCalendar(taskId: string, accessToken: string) {
+    const task = await TaskRepository.getTaskById(taskId);
+    if (!task || !task.calendarEventId) {
+      // If no event ID, nothing to delete
+      return;
+    }
+
+    const endpoint = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${task.calendarEventId}`;
+    const response = await fetch(endpoint, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok && response.status !== 404) {
+      // Ignore 404 (event already deleted) but throw other errors
+      const googleError = await response.json().catch(() => null);
+      const reason = googleError?.error?.message || "Failed to delete event from Google Calendar";
+      throw new Error(reason);
+    }
+  }
 }

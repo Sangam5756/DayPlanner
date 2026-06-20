@@ -20,8 +20,8 @@ export function BlueprintSlotEditor({ slot, onUpdate, onDelete, categories }: Bl
       width: "100%"
     }}>
       {/* Time row */}
-      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 120px", display: "flex", alignItems: "center", gap: "8px" }}>
           <input
             type="time"
             value={slot.start}
@@ -34,23 +34,23 @@ export function BlueprintSlotEditor({ slot, onUpdate, onDelete, categories }: Bl
           type="time"
           value={slot.end}
           onChange={(e) => onUpdate({ ...slot, end: e.target.value })}
-          style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+          style={{ flex: "1 1 120px", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
         />
       </div>
 
       {/* Task info row */}
-      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
         <input
           type="text"
           value={slot.title}
           onChange={(e) => onUpdate({ ...slot, title: e.target.value })}
           placeholder="Task Title"
-          style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+          style={{ flex: "1 1 120px", minWidth: "0", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
         />
         <select
           value={slot.category}
           onChange={(e) => onUpdate({ ...slot, category: e.target.value })}
-          style={{ minWidth: "140px", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+          style={{ flex: "0 1 140px", minWidth: "140px", padding: "10px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
         >
           {categories.map((cat) => (
             <option key={cat.id} value={cat.id}>{cat.label}</option>

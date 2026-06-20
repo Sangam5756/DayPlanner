@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { UserPreferences, Blueprint, CategoryItem } from "@/types";
 import { BlueprintEditor } from "./BlueprintEditor";
@@ -70,7 +72,7 @@ export function Settings({
       </header>
 
       {/* Section Tabs */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
         <button
           type="button"
           onClick={() => setActiveSettingsSection("general")}
@@ -121,7 +123,7 @@ export function Settings({
           {/* Theme Setting */}
           <article style={{ padding: "24px", background: "var(--paper)", borderRadius: "12px", marginBottom: "16px", border: "1px solid var(--line)" }}>
             <p className="label" style={{ marginBottom: "12px" }}>THEME</p>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
               <div>
                 <h3 style={{ margin: 0 }}>Dark / Light mode</h3>
                 <small style={{ color: "var(--muted)" }}>Choose your preferred visual style</small>
@@ -159,7 +161,7 @@ export function Settings({
             className="primary submit"
             onClick={handleSavePrefs}
             disabled={isSavingPrefs}
-            style={{ marginTop: "24px", width: "100%", maxWidth: "200px", marginLeft: "auto" }}
+            style={{ marginTop: "24px", width: "100%" }}
           >
             {isSavingPrefs ? "Saving..." : "Save Settings"}
           </button>
@@ -170,7 +172,7 @@ export function Settings({
       {activeSettingsSection === "categories" && (
         <>
           <article style={{ padding: "24px", background: "var(--paper)", borderRadius: "12px", border: "1px solid var(--line)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
               <p className="label" style={{ marginBottom: 0 }}>CATEGORIES</p>
               <button type="button" onClick={addCategory} style={{ padding: "8px 16px", border: "1px solid var(--line)", borderRadius: "8px", background: "var(--panel)", color: "var(--ink)", cursor: "pointer" }}>
                 + Add Category
@@ -178,22 +180,22 @@ export function Settings({
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "400px", overflowY: "auto" }}>
               {categories.map((cat, index) => (
-                <div key={cat.id} style={{ display: "flex", gap: "8px", alignItems: "center", padding: "12px", background: "var(--panel)", borderRadius: "8px", border: "1px solid var(--line)" }}>
+                <div key={cat.id} style={{ display: "flex", gap: "8px", alignItems: "center", padding: "12px", background: "var(--panel)", borderRadius: "8px", border: "1px solid var(--line)", flexWrap: "wrap" }}>
                   <input
                     type="text"
                     value={cat.label}
                     onChange={(e) => updateCategory(index, { label: e.target.value })}
                     placeholder="Category name"
-                    style={{ flex: 1, padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+                    style={{ flex: "1 1 120px", minWidth: "0", padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
                   />
                   <select
                     value={cat.color}
                     onChange={(e) => updateCategory(index, { color: e.target.value })}
-                    style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+                    style={{ flex: "0 0 auto", padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)" }}
                   >
                     {colorOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.name}</option>)}
                   </select>
-                  <button type="button" onClick={() => removeCategory(index)} style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)", cursor: "pointer" }}>
+                  <button type="button" onClick={() => removeCategory(index)} style={{ flex: "0 0 auto", padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--paper)", color: "var(--ink)", cursor: "pointer" }}>
                     🗑️
                   </button>
                 </div>
@@ -204,7 +206,7 @@ export function Settings({
             className="primary submit"
             onClick={handleSavePrefs}
             disabled={isSavingPrefs}
-            style={{ marginTop: "24px", width: "100%", maxWidth: "200px", marginLeft: "auto" }}
+            style={{ marginTop: "24px", width: "100%" }}
           >
             {isSavingPrefs ? "Saving..." : "Save Categories"}
           </button>
