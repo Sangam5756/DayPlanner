@@ -2,8 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, SchemaType, Schema } from "@google/generative-ai";
-import { connectMongo } from "@/lib/mongodb";
-import { UserPreference } from "@/models/UserPreference";
+import { UserPreferenceService } from "@/services/UserPreferenceService";
 
 const taskSchema: Schema = {
   description: "A list of structured planner time blocks",
@@ -75,8 +74,7 @@ export async function POST(request: Request) {
   }
 
   // Load user's custom categories
-  await connectMongo();
-  let userPrefs = await UserPreference.findOne({ userEmail: session.user.email });
+  let userPrefs = await UserPreferenceService.getPreferences(session.user.email);
   const categories = userPrefs?.categories || [
     { id: "dsa", label: "DSA", color: "orange" },
     { id: "learning", label: "Learning", color: "purple" },
@@ -129,7 +127,6 @@ ${categories.map((cat: any) => `- ${cat.id} (${cat.label})`).join("\n")}`;
 
     return NextResponse.json(JSON.parse(outputText));
   } catch (error: any) {
-    console.error("Gemini planner failed", error);
     return NextResponse.json(
       { error: error?.message || "AI could not create the plan." },
       { status: 500 }

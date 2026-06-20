@@ -21,7 +21,6 @@ export async function refreshGoogleAccessToken(token: JWT): Promise<JWT> {
     const refreshed = await response.json();
 
     if (!response.ok) {
-      console.error("Google token refresh failed", refreshed);
       return { ...token, error: "RefreshAccessTokenError" };
     }
 
@@ -33,7 +32,6 @@ export async function refreshGoogleAccessToken(token: JWT): Promise<JWT> {
       error: undefined,
     };
   } catch (error) {
-    console.error("Google token refresh failed", error);
     return { ...token, error: "RefreshAccessTokenError" };
   }
 }

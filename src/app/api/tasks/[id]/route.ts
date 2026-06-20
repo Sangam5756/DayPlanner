@@ -1,8 +1,7 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
-import { connectMongo } from "@/lib/mongodb";
-import { Task } from "@/models/Task";
+import { TaskService } from "@/services/TaskService";
 
 export async function PATCH(
   request: Request,
@@ -32,12 +31,7 @@ export async function PATCH(
     Object.entries(body).filter(([key]) => allowed.includes(key))
   );
 
-  await connectMongo();
-  const task = await Task.findOneAndUpdate(
-    { _id: id, userEmail: email },
-    updates,
-    { new: true, runValidators: true }
-  );
+  const task = await TaskService.updateTask(id, updates);
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
   return NextResponse.json(task);
 }
@@ -51,8 +45,7 @@ export async function DELETE(
   if (!email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await context.params;
-  await connectMongo();
-  const task = await Task.findOneAndDelete({ _id: id, userEmail: email });
+  const task = await TaskService.deleteTask(id);
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
